@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+
 import Dashboard from './Dashboard';
 import DeadlineAlerts from './DeadlineAlerts';
 import ApplicationsTable from './ApplicationsTable';
@@ -7,9 +8,10 @@ import ApplicationForm from './ApplicationForm';
 import { exportCSV, exportHistoryCSV, importCSV } from '../utils/csv';
 import { logHistory } from '../utils/history';
 import { undoLastChange } from '../utils/undo';
-// import { generateTestApplications } from '../utils/testData';
+
 const STORAGE_KEY = 'mba-applications';
 
+/* ===================== INITIAL FORM ===================== */
 const initialFormState = {
   instituteName: '',
   instituteType: 'IIM',
@@ -22,8 +24,9 @@ const initialFormState = {
 
   piRegistrationDeadline: '',
   piDate: '',
+  piVenue: '',
 
-  result: '',
+  result: '', // Pending | Selected | Waitlisted | Rejected
   finalShortlisted: false,
 
   feeDeadline: '',
@@ -39,7 +42,7 @@ export default function MBATracker() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
-  /* ---------------- LOAD / SAVE ---------------- */
+  /* ===================== LOAD / SAVE ===================== */
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) setApplications(JSON.parse(saved));
@@ -49,22 +52,32 @@ export default function MBATracker() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(applications));
   }, [applications]);
 
-  /* ---------------- SAVE / UPDATE ---------------- */
+  /* ===================== SAVE / UPDATE ===================== */
   const saveApplication = () => {
     if (!formData.instituteName) {
       alert('Institute is required');
       return;
     }
 
+    /* ---------- NORMALIZE BUSINESS RULES ---------- */
+    const normalizedForm = {
+      ...formData,
+      finalShortlisted: formData.result === 'Selected',
+      feePaid:
+        formData.result === 'Selected'
+          ? formData.feePaid
+          : false
+    };
+
     if (editingId) {
       setApplications(prev =>
         prev.map(app => {
           if (app.id !== editingId) return app;
 
-          const historyUpdates = logHistory(app, formData);
+          const historyUpdates = logHistory(app, normalizedForm);
 
           return {
-            ...formData,
+            ...normalizedForm,
             id: editingId,
             history: [...(app.history || []), ...historyUpdates]
           };
@@ -74,13 +87,14 @@ export default function MBATracker() {
       setApplications(prev => [
         ...prev,
         {
-          ...formData,
+          ...normalizedForm,
           id: Date.now(),
           history: [
             {
-              date: new Date().toISOString(),
-              type: 'status',
-              message: 'Application added'
+              field: 'application',
+              from: 'none',
+              to: 'added',
+              date: new Date().toLocaleString()
             }
           ]
         }
@@ -92,7 +106,7 @@ export default function MBATracker() {
     setShowForm(false);
   };
 
-  /* ---------------- ACTIONS ---------------- */
+  /* ===================== ACTIONS ===================== */
   const handleEdit = (app) => {
     setFormData(app);
     setEditingId(app.id);
@@ -100,6 +114,7 @@ export default function MBATracker() {
   };
 
   const handleDelete = (id) => {
+    if (!window.confirm('Delete this application?')) return;
     setApplications(applications.filter(a => a.id !== id));
   };
 
@@ -109,51 +124,63 @@ export default function MBATracker() {
     );
   };
 
-  /* ---------------- UI ---------------- */
+  /* ===================== UI ===================== */
   return (
     <div className="min-h-screen bg-indigo-50 p-4">
       <div className="max-w-7xl mx-auto bg-white p-6 rounded shadow">
 
-        {/* HEADER */}
+        {/* ================= HEADER ================= */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        {/* Title */}
-        <h1 className="text-2xl font-bold text-indigo-900">
+          <h1 className="text-2xl font-bold text-indigo-900">
             MBA Application Tracker
-        </h1>
+          </h1>
 
-        {/* ACTION BUTTONS */}
-        <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
+          <div className="flex flex-wrap gap-2">
             <button
-            onClick={() => exportCSV(applications)}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
+              onClick={() => exportCSV(applications)}
+              className="bg-green-600 text-white px-4 py-2 rounded text-sm"
             >
-            ⬇ Export CSV
+              Export CSV
             </button>
 
-            <button>
+            <button
+              onClick={() => exportHistoryCSV(applications)}
+              className="bg-amber-500 text-white px-4 py-2 rounded text-sm"
+            >
+              Export History
+            </button>
 
-            <label className="flex items-center gap-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer text-sm">
-            Import CSV
-            <input
+            <label className="bg-gray-200 px-4 py-2 rounded cursor-pointer text-sm">
+              Import CSV
+              <input
                 type="file"
                 hidden
-                onChange={e => importCSV(e.target.files[0], setApplications)}
-            />
+                onChange={e =>
+                  importCSV(e.target.files[0], setApplications)
+                }
+              />
             </label>
-            </button>
+
             <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm"
+              onClick={() => {
+                setFormData(initialFormState);
+                setEditingId(null);
+                setShowForm(true);
+              }}
+              className="bg-indigo-600 text-white px-4 py-2 rounded text-sm"
             >
-            ＋ Add Application
+              + Add Application
             </button>
-        </div>
+          </div>
         </div>
 
-
+        {/* ================= DASHBOARD ================= */}
         <Dashboard applications={applications} />
+
+        {/* ================= ALERTS ================= */}
         <DeadlineAlerts applications={applications} />
 
+        {/* ================= TABLE ================= */}
         <ApplicationsTable
           applications={applications}
           onEdit={handleEdit}
@@ -161,6 +188,7 @@ export default function MBATracker() {
           onUndo={handleUndo}
         />
 
+        {/* ================= FORM ================= */}
         {showForm && (
           <ApplicationForm
             formData={formData}
@@ -179,53 +207,49 @@ export default function MBATracker() {
 
 
 
+
 // import React, { useEffect, useState } from 'react';
-// import { Plus, Download } from 'lucide-react';
-// import { instituteList } from '../data/institute';
 // import Dashboard from './Dashboard';
 // import DeadlineAlerts from './DeadlineAlerts';
 // import ApplicationsTable from './ApplicationsTable';
 // import ApplicationForm from './ApplicationForm';
-// import { exportCSV, importCSV } from '../utils/csv';
 
+// import { exportCSV, exportHistoryCSV, importCSV } from '../utils/csv';
+// import { logHistory } from '../utils/history';
+// import { undoLastChange } from '../utils/undo';
+// // import { generateTestApplications } from '../utils/testData';
 // const STORAGE_KEY = 'mba-applications';
 
-// /* ================= INITIAL FORM STATE ================= */
 // const initialFormState = {
 //   instituteName: '',
 //   instituteType: 'IIM',
 
 //   applicationDeadline: '',
 //   applicationFilled: false,
-//   applicationFilledDate: '',
 
 //   shortlisted: false,
 //   shortlistDate: '',
 
-//   piRegistration: false,
 //   piRegistrationDeadline: '',
 //   piDate: '',
 
-//   result: '', // Selected | Waitlisted | Rejected
-//   resultDate: '',
-
+//   result: '',
 //   finalShortlisted: false,
-//   feeAmount: '',
+
 //   feeDeadline: '',
 //   feePaid: false,
 
 //   notes: '',
-
-//   history: [] 
+//   history: []
 // };
 
-
-// const MBATracker = () => {
+// export default function MBATracker() {
 //   const [applications, setApplications] = useState([]);
-//   const [showForm, setShowForm] = useState(false);
 //   const [formData, setFormData] = useState(initialFormState);
+//   const [showForm, setShowForm] = useState(false);
+//   const [editingId, setEditingId] = useState(null);
 
-//   /* ================= LOAD / SAVE ================= */
+//   /* ---------------- LOAD / SAVE ---------------- */
 //   useEffect(() => {
 //     const saved = localStorage.getItem(STORAGE_KEY);
 //     if (saved) setApplications(JSON.parse(saved));
@@ -235,131 +259,131 @@ export default function MBATracker() {
 //     localStorage.setItem(STORAGE_KEY, JSON.stringify(applications));
 //   }, [applications]);
 
-//   /* ================= FORM ACTIONS ================= */
-//   const openNewForm = () => {
-//     setFormData(initialFormState);
-//     setShowForm(true);
-//   };
-
-//   const openEditForm = (app) => {
-//     setFormData(app);
-//     setShowForm(true);
-//   };
-
+//   /* ---------------- SAVE / UPDATE ---------------- */
 //   const saveApplication = () => {
 //     if (!formData.instituteName) {
-//       alert('Please select an institute');
+//       alert('Institute is required');
 //       return;
 //     }
 
-//     setApplications(prev => {
-//       if (formData.id) {
-//         return prev.map(a => (a.id === formData.id ? formData : a));
-//       }
-//       return [...prev, { ...formData, id: Date.now() }];
-//     });
+//     if (editingId) {
+//       setApplications(prev =>
+//         prev.map(app => {
+//           if (app.id !== editingId) return app;
 
-//     setShowForm(false);
+//           const historyUpdates = logHistory(app, formData);
+
+//           return {
+//             ...formData,
+//             id: editingId,
+//             history: [...(app.history || []), ...historyUpdates]
+//           };
+//         })
+//       );
+//     } else {
+//       setApplications(prev => [
+//         ...prev,
+//         {
+//           ...formData,
+//           id: Date.now(),
+//           history: [
+//             {
+//               date: new Date().toISOString(),
+//               type: 'status',
+//               message: 'Application added'
+//             }
+//           ]
+//         }
+//       ]);
+//     }
+
 //     setFormData(initialFormState);
+//     setEditingId(null);
+//     setShowForm(false);
 //   };
 
-//   const deleteApplication = (id) => {
-//     setApplications(prev => prev.filter(a => a.id !== id));
+//   /* ---------------- ACTIONS ---------------- */
+//   const handleEdit = (app) => {
+//     setFormData(app);
+//     setEditingId(app.id);
+//     setShowForm(true);
 //   };
 
-//   /* ================= UI ================= */
+//   const handleDelete = (id) => {
+//     setApplications(applications.filter(a => a.id !== id));
+//   };
+
+//   const handleUndo = (id) => {
+//     setApplications(prev =>
+//       prev.map(app => app.id === id ? undoLastChange(app) : app)
+//     );
+//   };
+
+//   /* ---------------- UI ---------------- */
 //   return (
 //     <div className="min-h-screen bg-indigo-50 p-4">
 //       <div className="max-w-7xl mx-auto bg-white p-6 rounded shadow">
 
-//        {/* HEADER */}
-//         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-
+//         {/* HEADER */}
+//         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
 //         {/* Title */}
-//         <h1 className="text-2xl font-bold text-gray-900">
+//         <h1 className="text-2xl font-bold text-indigo-900">
 //             MBA Application Tracker
 //         </h1>
 
-//         {/* Actions */}
-//         <div className="flex flex-wrap items-center gap-3 justify-start md:justify-end">
-
-//             {/* Export */}
+//         {/* ACTION BUTTONS */}
+//         <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
 //             <button
 //             onClick={() => exportCSV(applications)}
-//             className="flex items-center gap-2 px-4 py-2 text-sm font-medium
-//                         bg-green-600 text-white rounded-lg
-//                         hover:bg-green-700 transition"
+//             className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
 //             >
-//             <Download size={16} />
-//             Export CSV
+//             ⬇ Export CSV
 //             </button>
 
-//             {/* Import */}
-//             <label
-//             className="flex items-center gap-2 px-4 py-2 text-sm font-medium
-//                         bg-gray-200 text-gray-800 rounded-lg cursor-pointer
-//                         hover:bg-gray-300 transition"
-//             >
+//             <button>
+
+//             <label className="flex items-center gap-2 bg-gray-200 px-4 py-2 rounded-lg cursor-pointer text-sm">
 //             Import CSV
 //             <input
 //                 type="file"
-//                 accept=".csv"
 //                 hidden
-//                 onChange={(e) =>
-//                 importCSV(e.target.files[0], setApplications)
-//                 }
+//                 onChange={e => importCSV(e.target.files[0], setApplications)}
 //             />
 //             </label>
-
-//             {/* Add */}
-//             <button
-//             onClick={() => {
-//                 setShowForm(true);
-//                 setEditingId(null);
-//                 setFormData(initialFormState);
-//             }}
-//             className="flex items-center gap-2 px-4 py-2 text-sm font-medium
-//                         bg-indigo-600 text-white rounded-lg
-//                         hover:bg-indigo-700 transition"
-//             >
-//             <Plus size={16} />
-//             Add Application
 //             </button>
-
+//             <button
+//             onClick={() => setShowForm(true)}
+//             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm"
+//             >
+//             ＋ Add Application
+//             </button>
 //         </div>
 //         </div>
 
 
-//         {/* DASHBOARD */}
 //         <Dashboard applications={applications} />
-
-//         {/* DEADLINE ALERTS */}
 //         <DeadlineAlerts applications={applications} />
 
-//         {/* FORM */}
+//         <ApplicationsTable
+//           applications={applications}
+//           onEdit={handleEdit}
+//           onDelete={handleDelete}
+//           onUndo={handleUndo}
+//         />
+
 //         {showForm && (
 //           <ApplicationForm
 //             formData={formData}
 //             setFormData={setFormData}
-//             instituteList={instituteList}
 //             onSave={saveApplication}
-//             onCancel={() => {
-//               setShowForm(false);
-//               setFormData(initialFormState);
-//             }}
+//             onCancel={() => setShowForm(false)}
 //           />
 //         )}
-
-//         {/* TABLE */}
-//         <ApplicationsTable
-//           applications={applications}
-//           onEdit={openEditForm}
-//           onDelete={deleteApplication}
-//         />
 
 //       </div>
 //     </div>
 //   );
-// };
+// }
 
-// export default MBATracker;
+
+

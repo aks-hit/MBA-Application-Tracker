@@ -1,16 +1,18 @@
-export const logHistory = (prev, next) => {
-  const logs = [];
+export const logHistory = (oldApp, newApp) => {
+  const changes = [];
 
-  Object.keys(next).forEach(key => {
+  Object.keys(newApp).forEach(key => {
     if (key === 'history' || key === 'id') return;
-    if (prev[key] !== next[key]) {
-      logs.push({
-        date: new Date().toISOString(),
-        type: key.includes('Deadline') ? 'deadline' : 'edit',
-        message: `${key} changed from "${prev[key] || '-'}" → "${next[key] || '-'}"`
+
+    if (oldApp[key] !== newApp[key]) {
+      changes.push({
+        field: key,
+        from: oldApp[key],
+        to: newApp[key],
+        date: new Date().toLocaleString()
       });
     }
   });
 
-  return logs;
+  return changes;
 };

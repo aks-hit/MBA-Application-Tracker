@@ -11,9 +11,10 @@ export default function ApplicationsTable({ applications, onEdit, onDelete, onUn
       <table className="w-full text-sm">
         <thead className="bg-indigo-600 text-white">
           <tr>
-            <th className="p-2 text-left">Institute</th>
+            <th className="p-3 text-center">Institute</th>
             <th>Status</th>
             <th>Deadline</th>
+            <th className="p-3 text-center">PI Venue</th>
             <th>Result</th>
             <th>Actions</th>
           </tr>
@@ -23,7 +24,7 @@ export default function ApplicationsTable({ applications, onEdit, onDelete, onUn
           {applications.map(app => (
             <>
               <tr key={app.id} className="border-b">
-                <td className="p-2 font-medium">
+                <td className="p-3 font-medium">
                   {app.instituteName}
                   <ProgressBar app={app}/>
                 </td>
@@ -36,6 +37,10 @@ export default function ApplicationsTable({ applications, onEdit, onDelete, onUn
                 </td>
 
                 <td className="text-center">{app.applicationDeadline || '-'}</td>
+                <td className="p-3 text-center">
+                  {app.piVenue || '-'}
+                </td>
+
                 <td className="text-center">{app.result || '-'}</td>
 
                 <td className="text-center">
